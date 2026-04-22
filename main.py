@@ -21,12 +21,9 @@ class Phone(Field):
         super().__init__(value)
 
 class Birthday(Field):
-    def __init__(self, value):
+    def __init__(self, value: str):
         try:
-            if isinstance(value, str): # Додайте перевірку коректності даних
-                value = datetime.strptime(value, "%d.%m.%Y").date() # та перетворіть рядок на об'єкт datetime
-            elif isinstance(value, datetime):
-                value = value.date()
+            datetime.strptime(value, "%d.%m.%Y")
         except ValueError:
             raise ValueError("Invalid date format. Use DD.MM.YYYY")
         super().__init__(value)
@@ -71,7 +68,7 @@ class Record:
 
     def __str__(self):
         phones = "; ".join(str(p) for p in self.phones) if self.phones else "-"
-        birthday = self.birthday.value.strftime("%d.%m.%Y") if self.birthday else "-"
+        birthday = self.birthday.value if self.birthday else "-"
         return f"{self.name.value}, phones: {phones}, birthday: {birthday}"
 
 
@@ -93,8 +90,8 @@ class AddressBook(UserDict):
 
         for record in self.data.values():
             if record.birthday:
-                # беремо саме datetime.date з Birthday.value
-                birthday_this_year = record.birthday.value.replace(year=today.year)
+                birthday_date = datetime.strptime(record.birthday.value, "%d.%m.%Y").date()
+                birthday_this_year = birthday_date.replace(year=today.year)
                 delta_days = (birthday_this_year - today).days
 
                 if 0 < delta_days <= days:
@@ -167,6 +164,8 @@ def input_error(func):
             return "Enter name and phone correctly."
         except TypeError:
             return "No command entered. Please enter a command."
+        except AttributeError:
+            return "Contact not found."
     return inner
 
 
@@ -186,11 +185,8 @@ def add_contact(args, book: AddressBook, filename="AddressBook.txt"):
     else:
         # додаємо телефон до існуючого контакту
         if phone:
-            try:
-                record.add_phone(phone)
-                message = "Phone added."
-            except ValueError as e:
-                return f"Invalid phone: {e}"
+            record.add_phone(phone)
+            message = "Phone added."
         else:
             message = "Contact already exists. No phone provided."
 
@@ -209,21 +205,15 @@ def add_contact(args, book: AddressBook, filename="AddressBook.txt"):
 @input_error
 def change_contact(args, book: AddressBook, filename="AddressBook.txt"):
     name, old_phone, new_phone = args
-
     record = book.find(name)
-    if not record:
-        raise KeyError(name)
 
-    try:
-        record.edit_phone(old_phone, new_phone)
-    except ValueError as e:
-        return str(e)
+    record.edit_phone(old_phone, new_phone)
 
     # після зміни телефону зберігаємо всю книгу у файл
     with open(filename, "w", encoding="utf-8") as f:
         for rec in book.data.values():
             phones = ";".join(p.value for p in rec.phones) if rec.phones else ""
-            birthday_str = rec.birthday.value.strftime("%d.%m.%Y") if rec.birthday else ""
+            birthday_str = rec.birthday.value if rec.birthday else ""
             f.write(f"{rec.name.value},{phones},{birthday_str}\n")
 
     return f"Phone for {name} changed from {old_phone} to {new_phone}."
@@ -271,9 +261,6 @@ def load_contacts(filename="AddressBook.txt"):
 def phone_contact(args, book: AddressBook):
     name = args[0]
     record = book.find(name)
-    if not record:
-        return f"Contact {name} not found."
-
     phones = "; ".join(p.value for p in record.phones) if record.phones else "-"
     return f"{name}: {phones}"
 
@@ -284,28 +271,15 @@ def add_birthday(args, book: AddressBook):
         return "Enter name and birthday in format DD.MM.YYYY"
     name, birthday = args[0], args[1]
     record = book.find(name)
-    if not record:
-        return "Contact not found. Use command add firstly"
-    try:
-        record.add_birthday(Birthday(birthday))
-        return "Birthday added."
-    except ValueError as e:
-        return str(e)
+    record.add_birthday(Birthday(birthday))
+    return "Birthday added."
 
 @input_error
 def show_birthday(args, book: AddressBook):
-    if not args or len(args) < 1:
-        return "Enter name for the command 'show-birthday'."
-
     name = args[0]
     record = book.find(name)
-    if not record:
-        raise KeyError(name)
+    return f"{name}'s birthday: {record.birthday.value}" if record.birthday else f"{name} has no birthday set."
 
-    if record.birthday:
-        return f"{name}'s birthday: {record.birthday.value.strftime('%d.%m.%Y')}"
-    else:
-        return f"{name} has no birthday set."
 
 def birthdays(book: AddressBook):
     upcoming = book.get_upcoming_birthdays()
@@ -323,8 +297,9 @@ def save_contacts(book: AddressBook, filename="AddressBook.txt"):
     with open(filename, "w", encoding="utf-8") as f:
         for rec in book.data.values():
             phones = ";".join(p.value for p in rec.phones) if rec.phones else ""
-            birthday = rec.birthday.value.strftime("%d.%m.%Y") if rec.birthday else ""
+            birthday = rec.birthday.value if rec.birthday else ""
             f.write(f"{rec.name.value},{phones},{birthday}\n")
+
 
 
 def main():
